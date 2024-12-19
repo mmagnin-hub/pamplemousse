@@ -110,31 +110,37 @@ public:
     }
 
     void renderText(const std::string& text, int x, int y, int lineWidth) {
-        std::vector<std::string> words;
-        std::string word;
         std::istringstream stream(text);
-        while (stream >> word) {
-            words.push_back(word);
-        }
-
-        std::string currentLine;
+        std::string line;
         int yOffset = y;
-        for (const auto& word : words) {
-            std::string testLine = currentLine + (currentLine.empty() ? "" : " ") + word;
-            int textWidth, textHeight;
-            TTF_SizeText(font, testLine.c_str(), &textWidth, &textHeight);
-            if (textWidth > lineWidth) {
+
+        while (std::getline(stream, line)) {
+            std::istringstream wordStream(line);
+            std::string currentLine;
+            std::string word;
+
+            while (wordStream >> word) {
+                std::string testLine = currentLine + (currentLine.empty() ? "" : " ") + word;
+                int textWidth, textHeight;
+                TTF_SizeText(font, testLine.c_str(), &textWidth, &textHeight);
+                if (textWidth > lineWidth) {
+                    renderTextLine(currentLine, x, yOffset);
+                    yOffset += textHeight + 10; 
+                    currentLine = word; 
+                } else {
+                    currentLine = testLine; 
+                }
+            }
+
+            if (!currentLine.empty()) {
+                int textWidth, textHeight;
+                TTF_SizeText(font, currentLine.c_str(), &textWidth, &textHeight);
                 renderTextLine(currentLine, x, yOffset);
                 yOffset += textHeight + 10;
-                currentLine = word;
-            } else {
-                currentLine = testLine;
             }
         }
-        if (!currentLine.empty()) {
-            renderTextLine(currentLine, x, yOffset);
-        }
     }
+
 
     void renderTextLine(const std::string& text, int x, int y) {
         SDL_Surface* surface = TTF_RenderText_Blended(font, text.c_str(), {255, 255, 255, 255});
@@ -162,7 +168,12 @@ public:
         SDL_SetRenderDrawColor(renderer, currentScene.bgColor.r, currentScene.bgColor.g, currentScene.bgColor.b, currentScene.bgColor.a);
         SDL_RenderClear(renderer);
         renderImage(currentScene.imagePath);
-        renderTextInBox(currentScene.dialogue, 50, 400, 700, 180);
+        std::string textBox = currentScene.dialogue;
+        for (size_t i = 0; i < currentScene.choices.size(); ++i) {
+            textBox += "\n" + std::to_string(i + 1) + ". " + currentScene.choices[i].text;
+        }
+        renderTextInBox(textBox, 50, 400, 700, 180);
+
         SDL_RenderPresent(renderer);
     }
 
