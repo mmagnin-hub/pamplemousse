@@ -1,8 +1,10 @@
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 #include <iostream>
 #include <vector>
 #include <string>
+#include <sstream> 
 
 // Struct for a choice the player can make
 struct Choice {
@@ -15,6 +17,8 @@ struct Scene {
     int id;
     std::string dialogue;
     std::vector<Choice> choices;
+    SDL_Color bgColor; // New background color for the scene
+    std::string imagePath; // Path to the image to be displayed
 };
 
 class Game {
@@ -40,6 +44,11 @@ public:
             return false;
         }
 
+        if (!(IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG)) {
+            std::cerr << "SDL_image could not initialize! IMG_Error: " << IMG_GetError() << std::endl;
+            return false;
+        }
+
         window = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, SDL_WINDOW_SHOWN);
         if (!window) {
             std::cerr << "Window could not be created! SDL_Error: " << SDL_GetError() << std::endl;
@@ -52,7 +61,7 @@ public:
             return false;
         }
 
-        font = TTF_OpenFont("../fonts/Avenir.ttc", 24); // Change this to the path to your font file
+        font = TTF_OpenFont("../fonts/Avenir.ttc", 24);
         if (!font) {
             std::cerr << "Failed to load font! TTF_Error: " << TTF_GetError() << std::endl;
             return false;
@@ -63,13 +72,9 @@ public:
     }
 
     void loadScenes() {
-        scenes.push_back({0, "You wake up in a dark forest. What do you do?", { {"Look around", 1}, {"Go back to sleep", 2} }});
-        scenes.push_back({1, "You see a path leading north and a river to the south. What do you do?", { {"Follow the path", 3}, {"Go to the river", 4} }});
-        scenes.push_back({2, "You fall into a deep sleep and never wake up. The end.", {}});
-        scenes.push_back({3, "You reach a small village. The villagers greet you warmly.", {}});
-        scenes.push_back({4, "The river is cold and fast. Do you try to swim across?", { {"Yes", 5}, {"No", 6} }});
-        scenes.push_back({5, "You get swept away by the current. The end.", {}});
-        scenes.push_back({6, "You stay on the shore and wait. Nothing happens.", {}});
+        scenes.push_back({0, "You wake up in a dark forest. What do you do?", { {"Look around", 1}, {"Go back to sleep", 2} }, {0, 0, 0, 255}, "../images/forest.png"});
+        scenes.push_back({1, "You see a path leading north and a river to the south. What do you do?", { {"Follow the path", 3}, {"Go to the river", 4} }, {34, 139, 34, 255}, "../images/path.png"});
+        scenes.push_back({2, "You fall into a deep sleep and never wake up. The end.", {}, {128, 0, 128, 255}, "../images/bed.png"});
     }
 
     void handleInput() {
@@ -79,41 +84,85 @@ public:
                 isRunning = false;
             } else if (event.type == SDL_KEYDOWN) {
                 if (event.key.keysym.sym == SDLK_1 && scenes[currentSceneID].choices.size() > 0) {
+                    renderBlackScreenWithDelay(700);
                     currentSceneID = scenes[currentSceneID].choices[0].nextSceneID;
                 } else if (event.key.keysym.sym == SDLK_2 && scenes[currentSceneID].choices.size() > 1) {
+                    renderBlackScreenWithDelay(700);
                     currentSceneID = scenes[currentSceneID].choices[1].nextSceneID;
                 }
             }
         }
     }
 
-    void renderText(const std::string& text, int x, int y) {
-        SDL_Color color = {255, 255, 255, 255}; // White color
-        SDL_Surface* surface = TTF_RenderText_Blended(font, text.c_str(), color);
-        SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+    void renderBlackScreenWithDelay(int ms) {
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
+        SDL_RenderPresent(renderer);
+        SDL_Delay(ms);
+    }
 
+    void renderTextInBox(const std::string& text, int x, int y, int width, int height) {
+        SDL_Color color = {255, 255, 255, 255};
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 200);
+        SDL_Rect textBox = {x, y, width, height};
+        SDL_RenderFillRect(renderer, &textBox);
+        renderText(text, x + 10, y + 10, width - 20);
+    }
+
+    void renderText(const std::string& text, int x, int y, int lineWidth) {
+        std::vector<std::string> words;
+        std::string word;
+        std::istringstream stream(text);
+        while (stream >> word) {
+            words.push_back(word);
+        }
+
+        std::string currentLine;
+        int yOffset = y;
+        for (const auto& word : words) {
+            std::string testLine = currentLine + (currentLine.empty() ? "" : " ") + word;
+            int textWidth, textHeight;
+            TTF_SizeText(font, testLine.c_str(), &textWidth, &textHeight);
+            if (textWidth > lineWidth) {
+                renderTextLine(currentLine, x, yOffset);
+                yOffset += textHeight + 10;
+                currentLine = word;
+            } else {
+                currentLine = testLine;
+            }
+        }
+        if (!currentLine.empty()) {
+            renderTextLine(currentLine, x, yOffset);
+        }
+    }
+
+    void renderTextLine(const std::string& text, int x, int y) {
+        SDL_Surface* surface = TTF_RenderText_Blended(font, text.c_str(), {255, 255, 255, 255});
+        SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
         SDL_Rect dstRect = {x, y, surface->w, surface->h};
         SDL_RenderCopy(renderer, texture, nullptr, &dstRect);
-
         SDL_FreeSurface(surface);
         SDL_DestroyTexture(texture);
     }
 
-    void render() {
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-        SDL_RenderClear(renderer);
-
-        // Render current scene
-        Scene& currentScene = scenes[currentSceneID];
-        renderText(currentScene.dialogue, 50, 50);
-
-        int yOffset = 100;
-        for (size_t i = 0; i < currentScene.choices.size(); ++i) {
-            std::string choiceText = std::to_string(i + 1) + ". " + currentScene.choices[i].text;
-            renderText(choiceText, 50, 50 + yOffset);
-            yOffset += 40;
+    void renderImage(const std::string& imagePath) {
+        SDL_Surface* image = IMG_Load(imagePath.c_str());
+        if (!image) {
+            std::cerr << "Failed to load image: " << IMG_GetError() << std::endl;
+            return;
         }
+        SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, image);
+        SDL_RenderCopy(renderer, texture, nullptr, nullptr);
+        SDL_FreeSurface(image);
+        SDL_DestroyTexture(texture);
+    }
 
+    void render() {
+        Scene& currentScene = scenes[currentSceneID];
+        SDL_SetRenderDrawColor(renderer, currentScene.bgColor.r, currentScene.bgColor.g, currentScene.bgColor.b, currentScene.bgColor.a);
+        SDL_RenderClear(renderer);
+        renderImage(currentScene.imagePath);
+        renderTextInBox(currentScene.dialogue, 50, 400, 700, 180);
         SDL_RenderPresent(renderer);
     }
 
@@ -129,7 +178,7 @@ public:
         while (isRunning) {
             handleInput();
             render();
-            SDL_Delay(100); // Simulate a frame delay
+            SDL_Delay(100);
         }
     }
 };
@@ -140,9 +189,7 @@ int main(int argc, char* argv[]) {
         std::cerr << "Game failed to initialize." << std::endl;
         return -1;
     }
-
     game.run();
     game.clean();
-    
     return 0;
-} 
+}
