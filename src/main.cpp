@@ -1,10 +1,11 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
+#include <SDL2/SDL_mixer.h>
 #include <SDL2/SDL_ttf.h>
 #include <iostream>
 #include <vector>
 #include <string>
-#include <sstream> 
+#include <sstream>
 
 // Struct for a choice the player can make
 struct Choice {
@@ -21,6 +22,13 @@ struct Scene {
     std::string imagePath; // Path to the image to be displayed
 };
 
+// Struct for a chapter
+struct Chapter {
+    std::string title;
+    std::vector<Scene> scenes;
+    std::string themeMusicPath; // Path to the theme music for this chapter
+};
+
 class Game {
 private:
     SDL_Window* window;
@@ -28,13 +36,16 @@ private:
     TTF_Font* font;
     bool isRunning;
     std::vector<Scene> scenes;
+    std::vector<Chapter> chapters;
     int currentSceneID;
+    int currentChapterID;
+    Mix_Music* currentMusic;
 
 public:
-    Game() : window(nullptr), renderer(nullptr), font(nullptr), isRunning(true), currentSceneID(0) {}
+    Game() : window(nullptr), renderer(nullptr), font(nullptr), isRunning(true), currentSceneID(0), currentChapterID(0), currentMusic(nullptr) {}
 
     bool init(const char* title, int width, int height) {
-        if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
             std::cerr << "SDL could not initialize! SDL_Error: " << SDL_GetError() << std::endl;
             return false;
         }
@@ -46,6 +57,11 @@ public:
 
         if (!(IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG)) {
             std::cerr << "SDL_image could not initialize! IMG_Error: " << IMG_GetError() << std::endl;
+            return false;
+        }
+
+        if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048) < 0) {
+            std::cerr << "SDL_mixer could not initialize! Mix_Error: " << Mix_GetError() << std::endl;
             return false;
         }
 
@@ -68,43 +84,68 @@ public:
         }
 
         loadScenes();
+        loadChapters();
+        playChapterMusic(); // Play the music for the current chapter
         return true;
     }
 
     void loadScenes() {
-        scenes.push_back({0, "La vie parisienne enveloppe Juliette, jeune étudiante en école de mode, dans son petit appartement sous les toits.", { {"Suite ...", 1} }, {0, 0, 0, 255}, "../images/Poulpe/ballade_paris_0.png"});
-        scenes.push_back({1, "Aujourd'hui, la solitude lui pèse, et l’air de Paris semble l’appeler.", { {"Suite ...", 2} }, {0, 0, 0, 255}, "../images/Poulpe/ballade_paris_0.png"});
-        scenes.push_back({2, "Elle enfile son manteau et descend les escaliers grinçants, décidée à se perdre dans les rues.", { {"Suite ...", 3} }, {0, 0, 0, 255}, "../images/Poulpe/ballade_paris_0.png"});
+        scenes.push_back({0, "La vie parisienne enveloppe Juliette, jeune étudiante en école de mode, dans son petit appartement sous les toits.", {{"Suite ...", 1}}, {0, 0, 0, 255}, "../images/Poulpe/ballade_paris_0.png"});
+        scenes.push_back({1, "Aujourd'hui, la solitude lui pèse, et l’air de Paris semble l’appeler.", {{"Suite ...", 2}}, {0, 0, 0, 255}, "../images/Poulpe/ballade_paris_0.png"});
+        scenes.push_back({2, "Elle enfile son manteau et descend les escaliers grinçants, décidée à se perdre dans les rues.", {{"Suite ...", 3}}, {0, 0, 0, 255}, "../images/Poulpe/ballade_paris_0.png"});
         scenes.push_back({3, "Elle croise son reflet dans une vitrine. Ses cheveux tombent comme un rideau fatigué autour de son visage.", {{"Suite ...", 4}}, {0, 0, 0, 255}, "../images/Poulpe/coiffure.png"});
         scenes.push_back({4, "Pourquoi pas un changement ?, pensa-t-elle.", {{"Ça me remettra les idées en place.", 7}, {"Je n'ai pas l'énergie.", 5}}, {0, 0, 0, 255}, "../images/Poulpe/coiffure.png"});
         scenes.push_back({5, "Vraiment pas ? Tu es sûre ?", {{"Bon d'accord.", 7}, {"NON.", 6}}, {0, 0, 0, 255}, "../images/Poulpe/coiffure_1.png"});
-        scenes.push_back({6, "NON ??? Comment  ça non ? Il FAUT changer ça tout de suite!", {{"Bon d'accord.", 7} }, {0, 0, 0, 255}, "../images/Poulpe/coiffure_2.png"});
-        scenes.push_back({7, "Chez la coiffeuse, Juliette ose une nouvelle frange. En sortant, une brise caresse son visage, et elle se sent légère, comme si quelque chose avait changé en elle.", {{"Suite ...", 8} }, {0, 0, 0, 255}, "../images/Poulpe/ballade_paris_1.png"});
-        scenes.push_back({8, "Une fresque attire son regard : un poulpe majestueux peint sur un vieux mur décrépit. Ses tentacules semblent l’appeler, et une étrange sensation naît en elle.", {{"Suite ...", 9} }, {0, 0, 0, 255}, "../images/Poulpe/rencontre.png"});
-        scenes.push_back({9, "Pourquoi cette peinture la touche-t-elle autant ? Il faut que je le retrouve… murmure-t-elle.", {{"Suite ...", 10} }, {0, 0, 0, 255}, "../images/Poulpe/rencontre.png"});
-        scenes.push_back({10, "Mais demain, elle part à l’île de Ré. Les billets de train sont déjà prêts.", {{"Continuer vers le poulpe ?", 11}, {"Aller se reposer avant le voyage ?", 14} }, {0, 0, 0, 255}, "../images/Poulpe/rencontre.png"});
-        scenes.push_back({11, "En suivant la direction du poulpe, elle rencontre Mathis, un garçon au sourire franc.", {{"Suite ...", 12} }, {0, 0, 0, 255}, "../images/Poulpe/mathis_0.png"});
-        scenes.push_back({12, "Ils parlent, rient, cherchent le poulpe ensemble, mais sans succès.", {{"Suite ...", 13} }, {0, 0, 0, 255}, "../images/Poulpe/mathis_0.png"});
-        scenes.push_back({13, "Viens avec moi à l’île de Ré, lui propose-t-elle, presque sur un coup de tête. Il accepte.", {{"Suite ...", 16} }, {0, 0, 0, 255}, "../images/Poulpe/mathis_0.png"});
-        scenes.push_back({14, "Le lendemain, fatiguée du long voyage, elle arrive à l’île : Le vent salé de l’océan l’accueille, mais ses pas sont lourds.", {{"Suite ...", 15} }, {0, 0, 0, 255}, "../images/Poulpe/arrivee_ile.png"});
-        scenes.push_back({15, "Elle s’endort rapidement, rêvant de poulpes et de mystères.", {{"Suite ...", 18} }, {0, 0, 0, 255}, "../images/Poulpe/arrivee_ile.png"});
-        scenes.push_back({16, "Le lendemain, fatiguée du long voyage, ils arrivent à l’île : Le vent salé de l’océan les accueilles, mais leurs pas sont lourds.", {{"Suite ...", 17} }, {0, 0, 0, 255}, "../images/Poulpe/arrivee_ile.png"});
-        scenes.push_back({17, "Elle s’endort rapidement, rêvant de poulpes et de mystères. Avec une pensée pour Mathis qui dort dans la chambre d'à côté.", {{"Suite ...", 19} }, {0, 0, 0, 255}, "../images/Poulpe/arrivee_ile.png"});
-        scenes.push_back({18, "Au matin, seule, Juliette construit un pont de sable. Malgrés sa joie, son esprit est ailleurs.", {{"Suite ...", 20} }, {0, 0, 0, 255}, "../images/Poulpe/pont_juliette.png"});
-        scenes.push_back({19, "Au matin, avec Mathis, ils bâtissent ensemble un pont de sable, leurs mains s’effleurant dans les grains dorés.", {{"Suite ...", 21} }, {0, 0, 0, 255}, "../images/Poulpe/pont_mathis.png"});
-        scenes.push_back({20, "Elle enfourche un vélo et se perd dans les marais en quête du poulpe.", {{"Suite ...", 23} }, {0, 0, 0, 255}, "../images/Poulpe/velo.png"});
-        scenes.push_back({21, "Avec Mathis, ils pédalent côte à côte, leurs rires se mêlant au vent marin.", {{"Suite ...", 22} }, {0, 0, 0, 255}, "../images/Poulpe/velo.png"});
-        scenes.push_back({22, "Ils cherchent toujours ce poulpe, mais rien. Une certaine désillusion commence à apparaître.", {{"Suite ...", 23} }, {0, 0, 0, 255}, "../images/Poulpe/velo.png"});
-        scenes.push_back({23, "Sous le sable, elle découvre un garçon enterré. Elle creuse pour le libérer. Il s'appelle Mathis et était en train de rêver d'un poulpe.", {{"Suite ...", 24} }, {0, 0, 0, 255}, "../images/Poulpe/mathis_enterre.png"});
-        scenes.push_back({24, "Lorsqu'il se réveilla il était enterré. Bizzare...", {{"Suite ...", 26} }, {0, 0, 0, 255}, "../images/Poulpe/mathis_enterre.png"});
-        scenes.push_back({25, "Elle enfouit Mathis sous le sable pour plaisanter, leurs éclats de rire résonnant dans l’air chaud.", {{"Suite ...", 26} }, {0, 0, 0, 255}, "../images/Poulpe/mathis_enterre.png"});
-        scenes.push_back({26, "Mathis la regarde, ses yeux brillants d’une lueur tendre. Juliette sent son cœur battre plus fort.", {{"Suite ...", 27} }, {0, 0, 0, 255}, "../images/Poulpe/seduction.png"});
-        scenes.push_back({27, "Dois-je l’embrasser ? hésite-t-elle.", {{"Oui !", 28}, {"C'est peut-être trop tôt.",29} }, {0, 0, 0, 255}, "../images/Poulpe/seduction.png"});
-        scenes.push_back({28, "Leur baiser est doux, infini, et le temps semble s’arrêter.", {{"Suite ...", 30} }, {0, 0, 0, 255}, "../images/Poulpe/bisou.png"});
-        scenes.push_back({29, "Mathis s’approche ... Et si on s’embrassais ? proposa-t-il.", {{"Suite ...",28} }, {0, 0, 0, 255}, "../images/Poulpe/seduction.png"});
-        scenes.push_back({30, "De retour dans la ville lumière, ils arpentent les rues main dans la main, toujours à la recherche du poulpe.", {{"Suite ...",31} }, {0, 0, 0, 255}, "../images/Poulpe/retour_paris.png"});
-        scenes.push_back({31, "Et puis… là-bas, dans l’ombre, ils aperçoivent enfin une forme familière.", {{"Suite ...",32} }, {0, 0, 0, 255}, "../images/Poulpe/retour_paris.png"});
+        scenes.push_back({6, "NON ??? Comment ça non ? Il FAUT changer ça tout de suite!", {{"Bon d'accord.", 7}}, {0, 0, 0, 255}, "../images/Poulpe/coiffure_2.png"});
+        scenes.push_back({7, "Chez la coiffeuse, Juliette ose une nouvelle frange. En sortant, une brise caresse son visage, et elle se sent légère, comme si quelque chose avait changé en elle.", {{"Suite ...", 8}}, {0, 0, 0, 255}, "../images/Poulpe/ballade_paris_1.png"});
+        scenes.push_back({8, "Une fresque attire son regard : un poulpe majestueux peint sur un vieux mur décrépit. Ses tentacules semblent l’appeler, et une étrange sensation naît en elle.", {{"Suite ...", 9}}, {0, 0, 0, 255}, "../images/Poulpe/rencontre.png"});
+        scenes.push_back({9, "Pourquoi cette peinture la touche-t-elle autant ? Il faut que je le retrouve… murmure-t-elle.", {{"Suite ...", 10}}, {0, 0, 0, 255}, "../images/Poulpe/rencontre.png"});
+        scenes.push_back({10, "Mais demain, elle part à l’île de Ré. Les billets de train sont déjà prêts.", {{"Continuer vers le poulpe ?", 11}, {"Aller se reposer avant le voyage ?", 14}}, {0, 0, 0, 255}, "../images/Poulpe/rencontre.png"});
+        scenes.push_back({11, "En suivant la direction du poulpe, elle rencontre Mathis, un garçon au sourire franc.", {{"Suite ...", 12}}, {0, 0, 0, 255}, "../images/Poulpe/mathis_0.png"});
+        scenes.push_back({12, "Ils parlent, rient, cherchent le poulpe ensemble, mais sans succès.", {{"Suite ...", 13}}, {0, 0, 0, 255}, "../images/Poulpe/mathis_0.png"});
+        scenes.push_back({13, "Viens avec moi à l’île de Ré, lui propose-t-elle, presque sur un coup de tête. Il accepte.", {{"Suite ...", 16}}, {0, 0, 0, 255}, "../images/Poulpe/mathis_0.png"});
+        scenes.push_back({14, "Le lendemain, fatiguée du long voyage, elle arrive à l’île : Le vent salé de l’océan l’accueille, mais ses pas sont lourds.", {{"Suite ...", 15}}, {0, 0, 0, 255}, "../images/Poulpe/arrivee_ile.png"});
+        scenes.push_back({15, "Elle s’endort rapidement, rêvant de poulpes et de mystères.", {{"Suite ...", 18}}, {0, 0, 0, 255}, "../images/Poulpe/arrivee_ile.png"});
+        scenes.push_back({16, "Le lendemain, fatiguée du long voyage, ils arrivent à l’île : Le vent salé de l’océan les accueille, mais leurs pas sont lourds.", {{"Suite ...", 17}}, {0, 0, 0, 255}, "../images/Poulpe/arrivee_ile.png"});
+        scenes.push_back({17, "Elle s’endort rapidement, rêvant de poulpes et de mystères. Avec une pensée pour Mathis qui dort dans la chambre d'à côté.", {{"Suite ...", 19}}, {0, 0, 0, 255}, "../images/Poulpe/arrivee_ile.png"});
+        scenes.push_back({18, "Au matin, seule, Juliette construit un pont de sable. Malgré sa joie, son esprit est ailleurs.", {{"Suite ...", 20}}, {0, 0, 0, 255}, "../images/Poulpe/pont_juliette.png"});
+        scenes.push_back({19, "Au matin, avec Mathis, ils bâtissent ensemble un pont de sable, leurs mains s’effleurant dans les grains dorés.", {{"Suite ...", 21}}, {0, 0, 0, 255}, "../images/Poulpe/pont_mathis.png"});
+        scenes.push_back({20, "Elle enfourche un vélo et se perd dans les marais en quête du poulpe.", {{"Suite ...", 23}}, {0, 0, 0, 255}, "../images/Poulpe/velo.png"});
+        scenes.push_back({21, "Avec Mathis, ils pédalent côte à côte, leurs rires se mêlant au vent marin.", {{"Suite ...", 22}}, {0, 0, 0, 255}, "../images/Poulpe/velo.png"});
+        scenes.push_back({22, "Ils cherchent toujours ce poulpe, mais rien. Une certaine désillusion commence à apparaître.", {{"Suite ...", 25}}, {0, 0, 0, 255}, "../images/Poulpe/velo.png"});
+        scenes.push_back({23, "Sous le sable, elle découvre un garçon enterré. Elle creuse pour le libérer. Il s'appelle Mathis et était en train de rêver d'un poulpe.", {{"Suite ...", 24}}, {0, 0, 0, 255}, "../images/Poulpe/mathis_enterre.png"});
+        scenes.push_back({24, "Lorsqu'il se réveilla il était enterré. Bizarre...", {{"Suite ...", 26}}, {0, 0, 0, 255}, "../images/Poulpe/mathis_enterre.png"});
+        scenes.push_back({25, "Elle enfouit Mathis sous le sable pour plaisanter, leurs éclats de rire résonnant dans l’air chaud.", {{"Suite ...", 26}}, {0, 0, 0, 255}, "../images/Poulpe/mathis_enterre.png"});
+        scenes.push_back({26, "Mathis la regarde, ses yeux brillants d’une lueur tendre. Juliette sent son cœur battre plus fort.", {{"Suite ...", 27}}, {0, 0, 0, 255}, "../images/Poulpe/seduction.png"});
+        scenes.push_back({27, "Dois-je l’embrasser ? hésite-t-elle.", {{"Oui !", 28}, {"C'est peut-être trop tôt.", 29}}, {0, 0, 0, 255}, "../images/Poulpe/seduction.png"});
+        scenes.push_back({28, "Leur baiser est doux, infini, et le temps semble s’arrêter.", {{"Suite ...", 30}}, {0, 0, 0, 255}, "../images/Poulpe/bisou.png"});
+        scenes.push_back({29, "Mathis s’approche ... Et si on s’embrassait ? proposa-t-il.", {{"Suite ...", 28}}, {0, 0, 0, 255}, "../images/Poulpe/seduction.png"});
+        scenes.push_back({30, "De retour dans la ville lumière, ils arpentent les rues main dans la main, toujours à la recherche du poulpe.", {{"Suite ...", 31}}, {0, 0, 0, 255}, "../images/Poulpe/retour_paris.png"});
+        scenes.push_back({31, "Et puis… là-bas, dans l’ombre, ils aperçoivent enfin une forme familière.", {{"Suite ...", 32}}, {0, 0, 0, 255}, "../images/Poulpe/retour_paris.png"});
         scenes.push_back({32, "Le poulpe est sauvé et trouve refuge dans le lit de Juliette. À ses côtés, Mathis s’installe, son bras passé autour d’elle. Leurs cœurs battent à l’unisson, comme une promesse. Fin", {}, {0, 0, 0, 255}, "../images/Poulpe/fin.png"});
+    }
+
+    void loadChapters() {
+        Chapter poulpe;
+        poulpe.title = "Poulpe";
+        poulpe.scenes = scenes;
+        poulpe.themeMusicPath = "../audio/poulpe_theme.mp3"; // Path to the theme music
+        chapters.push_back(poulpe);
+    }
+
+    void playChapterMusic() {
+        if (currentMusic) {
+            Mix_HaltMusic();
+            Mix_FreeMusic(currentMusic);
+        }
+
+        std::string musicPath = chapters[currentChapterID].themeMusicPath;
+        currentMusic = Mix_LoadMUS(musicPath.c_str());
+        if (!currentMusic) {
+            std::cerr << "Failed to load music! Mix_Error: " << Mix_GetError() << std::endl;
+        } else {
+            Mix_PlayMusic(currentMusic, -1); // Play music in a loop
+        }
     }
 
     void handleInput() {
@@ -114,10 +155,10 @@ public:
                 isRunning = false;
             } else if (event.type == SDL_KEYDOWN) {
                 if (event.key.keysym.sym == SDLK_1 && scenes[currentSceneID].choices.size() > 0) {
-                    //renderBlackScreenWithDelay(700);
+                    renderBlackScreenWithDelay(500);
                     currentSceneID = scenes[currentSceneID].choices[0].nextSceneID;
                 } else if (event.key.keysym.sym == SDLK_2 && scenes[currentSceneID].choices.size() > 1) {
-                    // renderBlackScreenWithDelay(700);
+                    renderBlackScreenWithDelay(500);
                     currentSceneID = scenes[currentSceneID].choices[1].nextSceneID;
                 }
             }
@@ -155,10 +196,10 @@ public:
                 TTF_SizeText(font, testLine.c_str(), &textWidth, &textHeight);
                 if (textWidth > lineWidth) {
                     renderTextLine(currentLine, x, yOffset);
-                    yOffset += textHeight + 10; 
-                    currentLine = word; 
+                    yOffset += textHeight + 10;
+                    currentLine = word;
                 } else {
-                    currentLine = testLine; 
+                    currentLine = testLine;
                 }
             }
 
@@ -171,9 +212,12 @@ public:
         }
     }
 
-
     void renderTextLine(const std::string& text, int x, int y) {
-        SDL_Surface* surface = TTF_RenderText_Blended(font, text.c_str(), {255, 255, 255, 255});
+        SDL_Surface* surface = TTF_RenderUTF8_Blended(font, text.c_str(), {255, 255, 255, 255});
+        if (!surface) {
+            std::cerr << "Failed to create text surface: " << TTF_GetError() << std::endl;
+            return;
+        }
         SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
         SDL_Rect dstRect = {x, y, surface->w, surface->h};
         SDL_RenderCopy(renderer, texture, nullptr, &dstRect);
@@ -188,7 +232,25 @@ public:
             return;
         }
         SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, image);
-        SDL_RenderCopy(renderer, texture, nullptr, nullptr);
+
+        int winW, winH, imgW, imgH;
+        SDL_GetWindowSize(window, &winW, &winH);
+        imgW = image->w;
+        imgH = image->h;
+
+        float aspectRatio = static_cast<float>(imgW) / imgH;
+        SDL_Rect dstRect;
+        if (imgW > imgH) {
+            dstRect.w = winW;
+            dstRect.h = static_cast<int>(winW / aspectRatio);
+        } else {
+            dstRect.h = winH;
+            dstRect.w = static_cast<int>(winH * aspectRatio);
+        }
+        dstRect.x = (winW - dstRect.w) / 2;
+        dstRect.y = (winH - dstRect.h) / 2;
+
+        SDL_RenderCopy(renderer, texture, nullptr, &dstRect);
         SDL_FreeSurface(image);
         SDL_DestroyTexture(texture);
     }
@@ -208,6 +270,8 @@ public:
     }
 
     void clean() {
+        if (currentMusic) Mix_FreeMusic(currentMusic); // Free the music
+        Mix_CloseAudio();
         TTF_CloseFont(font);
         SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
