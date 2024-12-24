@@ -234,10 +234,10 @@ public:
                 isRunning = false;
             } else if (event.type == SDL_KEYDOWN) {
                 if (event.key.keysym.sym == SDLK_1 && scenes[currentSceneID].choices.size() > 0) {
-                    renderBlackScreenWithDelay(500);
+                    renderBlackScreenWithDelay(300);
                     currentSceneID = scenes[currentSceneID].choices[0].nextSceneID;
                 } else if (event.key.keysym.sym == SDLK_2 && scenes[currentSceneID].choices.size() > 1) {
-                    renderBlackScreenWithDelay(500);
+                    renderBlackScreenWithDelay(300);
                     currentSceneID = scenes[currentSceneID].choices[1].nextSceneID;
                 }
             }
